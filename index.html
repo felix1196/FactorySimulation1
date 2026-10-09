@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>Production Line</title>
+<style>
+:root{--bg:#0b0f14;--fg:#e6e6e6;--h1:#1f2832;--h2:#151b22;--bar:#121820;--bd:#263040;--lab:#9fb0c3;--inp:#0b0f14;--inpfg:#fff;--inpbd:#33425a;--card:#151c26;--num:#7fdcff;--log:#8fa}
+body[data-theme=light]{--bg:#eef2f7;--fg:#1c2530;--h1:#ffffff;--h2:#e3e9f1;--bar:#f8fafc;--bd:#c9d3e0;--lab:#516176;--inp:#fff;--inpfg:#111;--inpbd:#aab6c6;--card:#fff;--num:#0b62c4;--log:#146c43}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:Segoe UI,Arial,sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 18px;background:linear-gradient(var(--h1),var(--h2));border-bottom:2px solid #2d7ff9}
+header h1{font-size:18px;margin:0;letter-spacing:1px}
+.hr{display:flex;gap:10px;align-items:center}
+select{background:var(--inp);color:var(--inpfg);border:1px solid var(--inpbd);padding:5px;border-radius:4px}
+#status{padding:4px 12px;border-radius:12px;font-weight:700;font-size:13px;color:#fff}
+#top{display:flex;flex-wrap:wrap;gap:12px;padding:10px 18px;background:var(--bar);align-items:flex-end;border-bottom:1px solid var(--bd)}
+label{font-size:11px;display:flex;flex-direction:column;gap:3px;color:var(--lab);text-transform:uppercase}
+input{width:84px;background:var(--inp);color:var(--inpfg);border:1px solid var(--inpbd);padding:4px 6px;border-radius:4px}
+button{background:#2d7ff9;color:#fff;border:0;padding:8px 13px;border-radius:5px;cursor:pointer;font-weight:600}
+button.r{background:#4a5568}button.w{background:#e0661a}
+#stats{display:flex;gap:10px;padding:10px 18px;flex-wrap:wrap}
+.k{background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:6px 14px;min-width:92px}
+.k small{display:block;font-size:10px;color:var(--lab);text-transform:uppercase}.k b{font-size:20px;color:var(--num)}
+canvas{display:block;margin:0 auto;max-width:100%}
+#log{font:12px Consolas,monospace;padding:6px 18px 14px;color:var(--log);max-height:110px;overflow:auto}
+#modal{display:none;position:fixed;inset:0;background:#000b;align-items:center;justify-content:center;z-index:9}
+#box{background:#241014;color:#eee;border:2px solid #ff4d4d;border-radius:10px;padding:26px;width:340px;text-align:center;box-shadow:0 0 40px #f004;animation:p 1s infinite}
+@keyframes p{50%{box-shadow:0 0 70px #f008}}
+#box input{width:90%;margin:5px 0;background:#0b0f14;color:#fff}#err{color:#ff8080;min-height:18px;font-size:13px}
+</style></head><body data-theme="dark">
+<header><h1 id="title"></h1><div class="hr">
+ <select id="lang"><option value="es">Español</option><option value="en">English</option></select>
+ <select id="theme"></select><div id="status"></div></div></header>
+<div id="top">
+ <label><span data-i="boxSize"></span><input id="boxSize" type="number" min="1" value="5"></label>
+ <label><span data-i="failRate"></span><input id="failRate" type="number" min="0" max="100" value="30"></label>
+ <label><span data-i="repScrap"></span><input id="repScrap" type="number" min="0" max="100" value="20"></label>
+ <label><span data-i="scrapN"></span><input id="scrapN" type="number" min="1" value="5"></label>
+ <label><span data-i="scrapT"></span><input id="scrapT" type="number" min="1" value="5"></label>
+ <label><span data-i="speed"></span><input id="speed" type="number" min="1" max="200" value="20"></label>
+ <label><span data-i="spawn"></span><input id="spawn" type="number" min="1" value="4"></label>
+ <label><span data-i="user"></span><input id="user" value="supervisor"></label>
+ <label><span data-i="pass"></span><input id="pass" type="password" value="1234"></label>
+ <button id="pp"></button><button class="w" id="manual" data-i="manual"></button><button class="r" id="reset" data-i="reset"></button>
+</div>
+<div id="stats"></div>
+<canvas id="c" width="1200" height="560"></canvas>
+<div id="log"></div>
+<div id="modal"><div id="box"><h2 data-i="haltTitle"></h2><p id="why"></p>
+<input id="u"><input id="p" type="password">
+<div id="err"></div><button id="ok" data-i="auth"></button></div></div><script>
+const $=id=>document.getElementById(id),cv=$('c'),g=cv.getContext('2d');
+const L={
+es:{title:'🏭 LÍNEA DE PRODUCCIÓN · SIMULACIÓN',boxSize:'Unidades por caja',failRate:'% falla en test',repScrap:'% scrap directo en reparación',scrapN:'Scraps para paro',scrapT:'Ventana (min sim.)',speed:'Velocidad (x)',spawn:'Creación cada (s)',user:'Usuario',pass:'Contraseña',manual:'Reparación → Scrap',reset:'Reiniciar',pause:'Pausar',resume:'Reanudar',haltTitle:'⛔ PARO DE LÍNEA',auth:'Autorizar y reanudar',userPh:'Usuario',passPh:'Contraseña',dark:'Modo oscuro',light:'Modo claro',
+ create:'CREACIÓN',assemble:'ENSAMBLE',test:'PRUEBAS / QC',pack:'EMPACADO',repair:'REPARACIÓN',scrap:'SCRAP',queue:'cola',idle:'INACTIVO',box:'CAJA',done:'completas',
+ stopped:'⛔ PARO DE LÍNEA',paused:'⏸ PAUSA',running:'🟢 EN PRODUCCIÓN',halted:'⛔ LÍNEA DETENIDA',
+ simTime:'Tiempo sim.',created:'Creadas',packed:'Empacadas',boxes:'Cajas',repaired:'Reparadas',scrapS:'Scrap',stops:'Paros',yield:'Yield 1ª pasada',
+ whyTxt:(n,m)=>`${n} unidades a scrap en ${m} min. Ingrese credenciales.`,badCred:'Credenciales incorrectas',
+ l2:id=>`Unidad #${id} falló 2 veces → SCRAP`,lFail:id=>`Unidad #${id} falló prueba → reparación`,lIrr:id=>`Unidad #${id} irreparable → SCRAP directo`,
+ lBox:n=>`📦 Caja #${n} completa`,lHalt:'⛔ PARO DE LÍNEA por scrap excesivo',lResume:u=>'✅ Línea reanudada por '+u,lNone:'No hay unidad en reparación',lMan:id=>`Unidad #${id} enviada a SCRAP manualmente desde reparación`},
+en:{title:'🏭 PRODUCTION LINE · SIMULATION',boxSize:'Units per box',failRate:'% test failure',repScrap:'% direct scrap at repair',scrapN:'Scraps to halt',scrapT:'Window (sim. min)',speed:'Speed (x)',spawn:'Create every (s)',user:'User',pass:'Password',manual:'Repair → Scrap',reset:'Reset',pause:'Pause',resume:'Resume',haltTitle:'⛔ LINE STOPPED',auth:'Authorize & resume',userPh:'User',passPh:'Password',dark:'Dark mode',light:'Light mode',
+ create:'CREATION',assemble:'ASSEMBLY',test:'TEST / QC',pack:'PACKING',repair:'REPAIR',scrap:'SCRAP',queue:'queue',idle:'IDLE',box:'BOX',done:'completed',
+ stopped:'⛔ LINE STOPPED',paused:'⏸ PAUSED',running:'🟢 IN PRODUCTION',halted:'⛔ LINE HALTED',
+ simTime:'Sim. time',created:'Created',packed:'Packed',boxes:'Boxes',repaired:'Repaired',scrapS:'Scrap',stops:'Stops',yield:'First-pass yield',
+ whyTxt:(n,m)=>`${n} units scrapped in ${m} min. Enter credentials.`,badCred:'Invalid credentials',
+ l2:id=>`Unit #${id} failed twice → SCRAP`,lFail:id=>`Unit #${id} failed test → repair`,lIrr:id=>`Unit #${id} unrepairable → direct SCRAP`,
+ lBox:n=>`📦 Box #${n} complete`,lHalt:'⛔ LINE STOPPED: excessive scrap',lResume:u=>'✅ Line resumed by '+u,lNone:'No unit at repair',lMan:id=>`Unit #${id} manually sent to SCRAP from repair`}};
+let lang=localStorage.getItem('lang')||'es',theme=localStorage.getItem('theme')||'dark';
+const tr=k=>L[lang][k];
+const P={dark:{bg1:'#10151c',bg2:'#0b0e13',grid:'#161d27',belt:'#2a313b',beltEdge:'#0a0d11',roller:'#3a4452',post:'#1a222c',beam:'#2c3745',desk:'#1b2431',deskEd:'#33425a',key:'#2a3442',pc:'#222c3a',mon:'#0a0d11',scr:'#08121c',monEd:'#556',txt:'#fff',sub:'#8a9bb0',led:'#334',idle:'#667'},
+ light:{bg1:'#f4f7fb',bg2:'#dfe6ef',grid:'#d3dbe6',belt:'#b9c2cf',beltEdge:'#7d8794',roller:'#9aa5b4',post:'#aab4c2',beam:'#c4ccd8',desk:'#e8edf4',deskEd:'#8f9db0',key:'#c4ccd8',pc:'#d5dce6',mon:'#2b3340',scr:'#0e1a28',monEd:'#6b7686',txt:'#1c2530',sub:'#516176',led:'#aab',idle:'#889'}};
+const C=()=>P[theme];
+function applyI18n(){document.documentElement.lang=lang;document.title=tr('title').slice(3);
+ $('title').textContent=tr('title');
+ document.querySelectorAll('[data-i]').forEach(e=>e.textContent=tr(e.dataset.i));
+ $('u').placeholder=tr('userPh');$('p').placeholder=tr('passPh');
+ $('theme').innerHTML=`<option value="dark">${tr('dark')}</option><option value="light">${tr('light')}</option>`;$('theme').value=theme;
+ $('lang').value=lang;document.body.dataset.theme=theme;$('pp').textContent=paused?tr('resume'):tr('pause');
+ if(halted)$('why').textContent=tr('whyTxt')(scrapTimes.length,$('scrapT').value)}
+const BY=190,RY=450; // belt principal y de reparación
+const S={
+ create:{n:'CREACIÓN',x:130,y:BY,t:3,c:'#4aa3ff',ql:1},
+ assemble:{n:'ENSAMBLE',x:380,y:BY,t:6,c:'#a78bfa',ql:1},
+ test:{n:'PRUEBAS / QC',x:640,y:BY,t:5,c:'#fbbf24',ql:1},
+ pack:{n:'EMPACADO',x:890,y:BY,t:2,c:'#34d399',ql:1},
+ repair:{n:'REPARACIÓN',x:640,y:RY,t:8,c:'#fb923c',ql:0},
+ scrap:{n:'SCRAP',x:940,y:RY,t:1,c:'#ef4444',ql:1}};
+let units,id,t,paused,halted,scrapTimes,stats,box,nextSpawn,boxes,lastTs,beltOff=0;
+function reset(){units=[];id=0;t=0;paused=false;halted=false;scrapTimes=[];nextSpawn=0;box=0;boxes=0;
+ stats={created:0,repaired:0,scrap:0,stops:0,okFirst:0};
+ for(const k in S){S[k].q=[];S[k].cur=null;S[k].left=0}
+ $('pp').textContent=tr('pause');$('modal').style.display='none';$('log').innerHTML=''}
+const fmt=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
+function log(m){const d=document.createElement('div');d.textContent=`[${fmt(t)}] ${m}`;$('log').prepend(d)}
+function spawn(){const u={id:++id,x:-30,y:BY,fails:0,st:'create',stage:0,wp:[],ok:false};units.push(u);stats.created++;S.create.q.push(u)}
+function go(u,st,wp){u.st=st;u.wp=wp||[];S[st].q.push(u)}
+function finish(u,k){
+ if(k==='create'){u.stage=1;go(u,'assemble')}
+ else if(k==='assemble'){u.stage=2;go(u,'test')}
+ else if(k==='test'){
+  if(Math.random()<+$('failRate').value/100){u.fails++;
+   if(u.fails>=2){log(tr('l2')(u.id));go(u,'scrap',[[640,BY+85],[640,RY]])}
+   else{log(tr('lFail')(u.id));go(u,'repair',[[640,BY+85]])}
+  }else{if(!u.fails)stats.okFirst++;u.ok=true;go(u,'pack')}}
+ else if(k==='repair'){
+  if(Math.random()<+$('repScrap').value/100){log(tr('lIrr')(u.id));go(u,'scrap')}
+  else{stats.repaired++;go(u,'test',[[640,BY+85]])}}
+ else if(k==='pack'){box++;u.exit=[1010,BY];
+  if(box>=+$('boxSize').value){boxes++;box=0;log(tr('lBox')(boxes))}}
+ else if(k==='scrap'){u.dead=1;u.exit=[u.x,u.y+10];stats.scrap++;scrapTimes.push(t);checkScrap()}}
+function checkScrap(){
+ const w=+$('scrapT').value*60,n=+$('scrapN').value;
+ scrapTimes=scrapTimes.filter(x=>t-x<=w);
+ if(scrapTimes.length>=n){halted=true;stats.stops++;
+  $('why').textContent=tr('whyTxt')(scrapTimes.length,$('scrapT').value);
+  $('err').textContent='';$('u').value=$('p').value='';$('modal').style.display='flex';
+  log(tr('lHalt'))}}
+$('ok').onclick=()=>{
+ if($('u').value===$('user').value&&$('p').value===$('pass').value){
+  halted=false;scrapTimes=[];$('modal').style.display='none';log(tr('lResume')($('u').value))}
+ else $('err').textContent=tr('badCred')};
+$('manual').onclick=()=>{const s=S.repair;if(!s.cur){log(tr('lNone'));return}
+ const u=s.cur;s.cur=null;log(tr('lMan')(u.id));go(u,'scrap')};
+$('pp').onclick=()=>{paused=!paused;$('pp').textContent=paused?tr('resume'):tr('pause')};
+$('lang').onchange=e=>{lang=e.target.value;localStorage.setItem('lang',lang);applyI18n()};
+$('theme').onchange=e=>{theme=e.target.value;localStorage.setItem('theme',theme);applyI18n()};
+$('reset').onclick=reset;
+function step(dt){
+ t+=dt;nextSpawn-=dt;
+ if(nextSpawn<=0){spawn();nextSpawn=+$('spawn').value}
+ for(const k in S){const s=S[k];
+  if(!s.cur&&s.q.length&&s.q[0].arrived){s.cur=s.q.shift();s.left=s.t}
+  if(s.cur){s.left-=dt;if(s.left<=0){const u=s.cur;s.cur=null;u.arrived=false;finish(u,k)}}}}
+function slot(u){const s=S[u.st];
+ if(s.cur===u)return[s.x,s.y];
+ const i=s.q.indexOf(u);
+ if(u.st==='repair')return[s.x,s.y-70-i*34];
+ return[s.x-80-i*34,s.y]}
+function move(u,dt){
+ let tg;
+ if(u.exit)tg=u.exit;else if(u.wp.length)tg=u.wp[0];else tg=slot(u);
+ const dx=tg[0]-u.x,dy=tg[1]-u.y,d=Math.hypot(dx,dy),sp=150*Math.max(1,+$('speed').value/5)*dt;
+ if(d<=sp){u.x=tg[0];u.y=tg[1];
+  if(u.exit&&!u.gone)u.gone=true;else if(u.wp.length&&!u.exit)u.wp.shift();
+  if(!u.exit&&!u.wp.length)u.arrived=true}
+ else{u.x+=dx/d*sp;u.y+=dy/d*sp;u.arrived=false}}
+// ---------- dibujo ----------
+function rr(x,y,w,h,r,f,s){g.beginPath();g.roundRect(x,y,w,h,r);if(f){g.fillStyle=f;g.fill()}if(s){g.strokeStyle=s;g.stroke()}}
+function belt(x1,y1,x2,y2,vertical){
+ g.save();const w=44;
+ if(vertical){rr(x1-w/2,y1,w,y2-y1,4,C().belt,C().beltEdge);
+  g.beginPath();g.rect(x1-w/2,y1,w,y2-y1);g.clip();
+  for(let y=y1-30+beltOff%30;y<y2;y+=30){g.fillStyle=C().roller;g.fillRect(x1-w/2,y,w,3)}
+ }else{rr(x1,y1-w/2,x2-x1,w,4,C().belt,C().beltEdge);
+  g.beginPath();g.rect(x1,y1-w/2,x2-x1,w);g.clip();
+  for(let x=x1-30+beltOff%30;x<x2;x+=30){g.fillStyle=C().roller;g.fillRect(x,y1-w/2,3,w)}}
+ g.restore();
+ g.fillStyle='#f5c542';
+ if(vertical){g.fillRect(x1-w/2-4,y1,4,y2-y1);g.fillRect(x1+w/2,y1,4,y2-y1)}
+ else{g.fillRect(x1,y1-w/2-4,x2-x1,4);g.fillRect(x1,y1+w/2,x2-x1,4)}}
+function drawUnit(u){
+ const x=u.x,y=u.y;g.save();g.translate(x,y);
+ if(u.gone&&u.dead){g.globalAlpha=0}
+ rr(-17,-12,34,24,4,['#8896a8','#5f7da8','#6b5fa8','#4a6a58'][u.stage]||'#8896a8','#fff3');
+ const scr=u.ok?'#34d399':u.fails?'#ef4444':u.stage>=2?'#fbbf24':'#1c2a3c';
+ rr(-12,-8,16,12,2,scr);
+ if(u.stage>=1){g.fillStyle='#22c55e';g.fillRect(7,-8,7,5);g.fillStyle='#38bdf8';g.fillRect(7,-1,7,4)}
+ if(u.stage>=2){g.fillStyle='#fbbf24';g.fillRect(-12,6,6,3);g.fillRect(-4,6,6,3)}
+ g.fillStyle=C().txt;g.font='bold 8px Segoe UI';g.textAlign='center';g.fillText('#'+u.id,0,-15);
+ if(u.fails){g.strokeStyle='#ef4444';g.lineWidth=2;g.strokeRect(-18,-13,36,26)}
+ g.restore()}
+function monitor(x,y,w,h,col,txt,prog){
+ rr(x,y,w,h,5,C().mon,C().monEd);rr(x+4,y+4,w-8,h-8,3,C().scr);
+ g.fillStyle=col;g.font='bold 10px Consolas';g.textAlign='center';g.fillText(txt,x+w/2,y+h/2+3);
+ if(prog!=null){g.fillStyle='#1d2733';g.fillRect(x+8,y+h-12,w-16,5);g.fillStyle=col;g.fillRect(x+8,y+h-12,(w-16)*prog,5)}
+ g.fillStyle=C().monEd;g.fillRect(x+w/2-4,y+h,8,8);g.fillRect(x+w/2-14,y+h+8,28,4)}
+function station(k){
+ const s=S[k],busy=!!s.cur,prog=busy?1-s.left/s.t:0,sx=s.x,sy=s.y,tt=performance.now()/1000;
+ const up=k!=='repair'&&k!=='scrap';
+ // estructura tipo gantry sobre la banda
+ g.fillStyle=C().post;g.fillRect(sx-60,sy-38,12,76);g.fillRect(sx+48,sy-38,12,76);
+ rr(sx-62,sy-100,124,14,3,C().beam,s.c);
+ // escritorio / gabinete
+ rr(sx-75,sy-165,150,60,6,C().desk,C().deskEd);
+ monitor(sx-62,sy-160,70,46,busy?s.c:C().idle,busy?Math.round(prog*100)+'%':tr('idle'),busy?prog:null);
+ // teclado y PC
+ rr(sx+14,sy-130,52,14,2,C().key);rr(sx+14,sy-155,52,20,3,C().pc,C().deskEd);
+ g.fillStyle=busy&&Math.floor(tt*4)%2?s.c:C().led;g.beginPath();g.arc(sx+58,sy-148,3,0,7);g.fill();
+ g.fillStyle=C().txt;g.font='bold 12px Segoe UI';g.textAlign='center';g.fillText(tr(k),sx,sy-172);
+ g.fillStyle=C().sub;g.font='11px Segoe UI';g.fillText(tr('queue')+': '+s.q.length,sx,sy+58);
+ // herramientas animadas
+ const sw=Math.sin(tt*5)*(busy?1:0.15);
+ g.strokeStyle=s.c;g.lineWidth=5;g.lineCap='round';g.beginPath();
+ g.moveTo(sx,sy-86);g.lineTo(sx+sw*22,sy-62);g.lineTo(sx+sw*10,sy-30+(busy?Math.abs(sw)*6:0));g.stroke();
+ g.fillStyle=busy?C().txt:C().idle;g.beginPath();g.arc(sx+sw*10,sy-28,4,0,7);g.fill();
+ if(k==='test'&&busy){g.fillStyle='#fbbf2455';g.fillRect(sx-24,sy-24,48,48);g.fillStyle='#fbbf24';g.fillRect(sx-24,sy-24+((tt*40)%48),48,2)}
+ if(k==='repair'&&busy){g.fillStyle='#ffd24a';for(let i=0;i<4;i++){g.fillRect(sx+sw*10+Math.cos(tt*9+i)*9,sy-28+Math.sin(tt*11+i*2)*8,2,2)}}
+}
+function scrapBin(){const s=S.scrap;
+ rr(s.x-45,s.y-35,90,70,4,'#3a1010','#ef4444');g.fillStyle='#ef4444';g.font='bold 12px Segoe UI';g.textAlign='center';
+ g.fillText(tr('scrap'),s.x,s.y-18);g.fillText(stats.scrap,s.x,s.y+10);g.fillText('🗑',s.x,s.y+28)}
+function packBox(){
+ const bs=+$('boxSize').value;rr(1050,BY-45,100,90,6,'#b08850','#6b5330');
+ g.fillStyle='#fff';g.font='bold 12px Segoe UI';g.textAlign='center';
+ g.fillText(tr('box'),1100,BY-20);g.fillText(box+' / '+bs,1100,BY+2);
+ g.fillStyle='#3a2d17';g.fillRect(1060,BY+12,80,8);g.fillStyle='#34d399';g.fillRect(1060,BY+12,80*box/bs,8);
+ g.fillStyle=C().sub;g.fillText(tr('done')+': '+boxes,1100,BY+62)}
+function draw(dt){
+ if(!paused&&!halted)beltOff+=dt*60*Math.max(1,+$('speed').value/10);
+ g.clearRect(0,0,1200,560);
+ let gr=g.createLinearGradient(0,0,0,560);gr.addColorStop(0,C().bg1);gr.addColorStop(1,C().bg2);g.fillStyle=gr;g.fillRect(0,0,1200,560);
+ g.strokeStyle=C().grid;g.lineWidth=1;for(let x=0;x<1200;x+=40){g.beginPath();g.moveTo(x,0);g.lineTo(x,560);g.stroke()}
+ belt(0,BY,1050,BY);belt(640,BY+22,640,RY-22,true);belt(640,RY,1000,RY);
+ for(const k in S)station(k);
+ scrapBin();packBox();
+ for(const u of units){if(!u.gone||!u.dead)drawUnit(u)}
+ if(halted){g.fillStyle='#ff000030';g.fillRect(0,0,1200,560);g.fillStyle='#ff4d4d';g.font='bold 22px Segoe UI';g.textAlign='center';g.fillText(tr('halted'),600,30)}
+ const st=$('status');st.textContent=halted?tr('stopped'):paused?tr('paused'):tr('running');
+ st.style.background=halted?'#7f1d1d':paused?'#5b4b12':'#14532d';
+ const bs=+$('boxSize').value;
+ const k=(a,b)=>`<div class="k"><small>${a}</small><b>${b}</b></div>`;
+ $('stats').innerHTML=k(tr('simTime'),fmt(t))+k(tr('created'),stats.created)+k(tr('packed'),boxes*bs+box)+k(tr('boxes'),boxes)+k(tr('repaired'),stats.repaired)+k(tr('scrapS'),stats.scrap)+k(tr('stops'),stats.stops)+k(tr('yield'),stats.created?Math.round(stats.okFirst/Math.max(1,stats.okFirst+stats.repaired+stats.scrap)*100)+'%':'-')}
+function loop(ts){const dt=Math.min((ts-(lastTs||ts))/1000,0.1);lastTs=ts;
+ if(!paused&&!halted){const sp=+$('speed').value,n=Math.max(1,Math.ceil(sp/5));for(let i=0;i<n;i++)step(dt*sp/n);
+  for(const u of units)move(u,dt);
+  units=units.filter(u=>!u.gone);}
+ draw(dt);requestAnimationFrame(loop)}
+reset();applyI18n();requestAnimationFrame(loop);
+</script></body></html>
